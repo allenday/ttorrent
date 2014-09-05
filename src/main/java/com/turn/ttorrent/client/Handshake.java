@@ -76,7 +76,6 @@ public class Handshake {
 		}
 
 		byte[] reserved = new byte[8];
-
 		buffer.get(reserved);
 
 		byte[] infoHash = new byte[20];
