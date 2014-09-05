@@ -76,8 +76,6 @@ public class Handshake {
 		}
 
 		byte[] reserved = new byte[8];
-                //enable extension protocol
-                reserved[5] = 0x10;
 
 		buffer.get(reserved);
 
@@ -97,6 +95,9 @@ public class Handshake {
 					Handshake.BITTORRENT_PROTOCOL_IDENTIFIER.length());
 
 			byte[] reserved = new byte[8];
+			//enable extension protocol
+			reserved[5] = 0x10;
+
 			ByteBuffer infoHash = ByteBuffer.wrap(torrentInfoHash);
 			ByteBuffer peerId = ByteBuffer.wrap(clientPeerId);
 
