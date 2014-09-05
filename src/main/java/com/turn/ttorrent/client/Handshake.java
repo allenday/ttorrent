@@ -75,8 +75,10 @@ public class Handshake {
 			throw new ParseException("Invalid protocol identifier!", 1);
 		}
 
-		// Ignore reserved bytes
 		byte[] reserved = new byte[8];
+                //enable extension protocol
+                reserved[5] = 0x10;
+
 		buffer.get(reserved);
 
 		byte[] infoHash = new byte[20];

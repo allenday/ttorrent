@@ -17,9 +17,18 @@ package com.turn.ttorrent.common.protocol;
 
 import com.turn.ttorrent.client.SharedTorrent;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
 import java.text.ParseException;
 import java.util.BitSet;
+import java.util.Map;
+
+import com.turn.ttorrent.bcodec.BDecoder;
+import com.turn.ttorrent.bcodec.BEValue;
+import com.turn.ttorrent.client.SharedTorrent;
 
 /**
  * BitTorrent peer protocol messages representations.
@@ -58,7 +67,8 @@ public abstract class PeerMessage {
 		BITFIELD(5),
 		REQUEST(6),
 		PIECE(7),
-		CANCEL(8);
+		CANCEL(8),
+		EXTENSION(20);
 
 		private byte id;
 		Type(int id) {
@@ -178,6 +188,8 @@ public abstract class PeerMessage {
 				return PieceMessage.parse(buffer.slice(), torrent);
 			case CANCEL:
 				return CancelMessage.parse(buffer.slice(), torrent);
+			case EXTENSION:
+				return ExtensionMessage.parse(buffer.slice(), torrent);
 			default:
 				throw new IllegalStateException("Message type should have " +
 						"been properly defined by now.");
@@ -667,4 +679,76 @@ public abstract class PeerMessage {
 				" (" + this.getLength() + "@" + this.getOffset() + ")";
 		}
 	}
+
+	/**
+	 * Extension message.
+	 * <len=0000><id=20><ext_id=uint8_t>
+	 *
+	 */
+	public static class ExtensionMessage extends PeerMessage {
+		
+		private static final int BASE_ID = 1;
+
+		private ExtensionMessage(ByteBuffer buffer) {
+			super(Type.EXTENSION, buffer);
+		}
+		
+		public static ExtensionMessage parse(ByteBuffer buffer,
+				SharedTorrent torrent) throws MessageValidationException {
+			System.err.println("EXTENSION");
+			int msgId = buffer.get();
+			System.err.println("MSG ID="+msgId);
+			if (msgId == 0) {
+				try {
+		            Charset charset = Charset.forName("ISO-8859-1");
+
+					ByteBuffer x = buffer.slice();
+					byte[] y = new byte[x.limit()];
+					x.get(y);
+					ByteBuffer z = ByteBuffer.wrap(y);
+
+//					CharBuffer cb = CharBuffer.wrap(x.asCharBuffer().array());
+					CharsetDecoder decoder = charset.newDecoder();
+		            CharBuffer cbuf = decoder.decode(z);
+		            System.err.println(cbuf);
+					
+					BEValue decoded = BDecoder.bdecode(z);
+					Map<String,BEValue> dat = decoded.getMap();
+					for (String k : dat.keySet()) {
+						System.err.println("k="+k+" v="+dat.get(k));
+					}
+					if (dat.containsKey("m")) {
+						Map<String,BEValue> mdat = dat.get("m").getMap();
+						for (String j : mdat.keySet()) {
+							System.err.println("  k="+j+" v="+mdat.get(j));
+						}
+						if (mdat.containsKey("ut_pex")) {
+							System.err.println("    k="+mdat.get("ut_pex"));
+//							Map<String,BEValue> pdat = mdat.get("ut_pex").getMap();
+//							for (String i : pdat.keySet()) {
+//								System.err.println("    k="+i+" v="+pdat.get(i));
+//							}
+							
+						}
+					}					
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+			ByteBuffer msg = buffer.slice();
+//			System.err.println("MSG="+msg.asCharBuffer());
+			return (ExtensionMessage)new ExtensionMessage(msg)
+				.validate(torrent);
+		}
+
+		public static ExtensionMessage craft() {
+			ByteBuffer buffer = ByteBuffer.allocateDirect(
+				MESSAGE_LENGTH_FIELD_SIZE + ExtensionMessage.BASE_ID);
+			buffer.putInt(ExtensionMessage.BASE_ID);
+			buffer.put(PeerMessage.Type.EXTENSION.getTypeByte());
+			return new ExtensionMessage(buffer);
+		}
+	}
+
 }
