@@ -299,7 +299,7 @@ class PeerExchange {
 					buffer.rewind();
 
 					try {
-						PeerMessage message = PeerMessage.parse(buffer, torrent);
+						PeerMessage message = PeerMessage.parse(buffer, torrent, peer);
 						logger.trace("Received {} from {}", message, peer);
 
 						// Wait if needed to reach configured download rate.
@@ -311,6 +311,7 @@ class PeerExchange {
 						}
 					} catch (ParseException pe) {
 						logger.warn("{}", pe.getMessage());
+						pe.printStackTrace();
 					}
 				}
 			} catch (IOException ioe) {

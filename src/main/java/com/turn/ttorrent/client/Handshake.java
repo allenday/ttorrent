@@ -97,6 +97,8 @@ public class Handshake {
 			byte[] reserved = new byte[8];
 			//enable extension protocol
 			reserved[5] = 0x10;
+			//enable DHT
+			reserved[7] = 0x01;
 
 			ByteBuffer infoHash = ByteBuffer.wrap(torrentInfoHash);
 			ByteBuffer peerId = ByteBuffer.wrap(clientPeerId);
