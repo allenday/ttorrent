@@ -372,7 +372,7 @@ public class ConnectionHandler implements Runnable {
 		// Read the handshake from the wire
 		logger.trace("Reading handshake size (1 byte) from {}...", this.socketRepr(channel));
 		if (channel.read(len) < len.capacity()) {
-			throw new IOException("Handshake size read underrrun");
+			throw new IOException("Handshake size read underrrun: channel.read(len)="+channel.read(len)+" < len.capacity()="+len.capacity());
 		}
 
 		len.rewind();

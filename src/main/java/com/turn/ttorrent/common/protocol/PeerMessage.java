@@ -15,20 +15,19 @@
  */
 package com.turn.ttorrent.common.protocol;
 
-import com.turn.ttorrent.client.SharedTorrent;
-
-import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.text.ParseException;
 import java.util.BitSet;
-import java.util.Map;
 
-import com.turn.ttorrent.bcodec.BDecoder;
-import com.turn.ttorrent.bcodec.BEValue;
 import com.turn.ttorrent.client.SharedTorrent;
+//import bencode.BDict;
+//import bencode.BDecoder;
+import com.turn.ttorrent.client.peer.SharingPeer;
 
 /**
  * BitTorrent peer protocol messages representations.
@@ -68,6 +67,7 @@ public abstract class PeerMessage {
 		REQUEST(6),
 		PIECE(7),
 		CANCEL(8),
+		PORT(9),
 		EXTENSION(20);
 
 		private byte id;
@@ -149,47 +149,51 @@ public abstract class PeerMessage {
 	 *
 	 * @param buffer The byte buffer containing the message data.
 	 * @param torrent The torrent this message is about.
+	 * @param peer The peer associated with the message
 	 * @return A PeerMessage subclass instance.
 	 * @throws ParseException When the message is invalid, can't be parsed or
 	 * does not match the protocol requirements.
 	 */
-	public static PeerMessage parse(ByteBuffer buffer, SharedTorrent torrent)
+	public static PeerMessage parse(ByteBuffer buffer, SharedTorrent torrent, SharingPeer peer)
 		throws ParseException {
 		int length = buffer.getInt();
 		if (length == 0) {
-			return KeepAliveMessage.parse(buffer, torrent);
+			return KeepAliveMessage.parse(buffer, torrent, peer);
 		} else if (length != buffer.remaining()) {
 			throw new ParseException("Message size did not match announced " +
 					"size!", 0);
 		}
 
-		Type type = Type.get(buffer.get());
+		Byte typeByte = buffer.get();
+		Type type = Type.get(typeByte);
 		if (type == null) {
-			throw new ParseException("Unknown message ID!",
+			throw new ParseException("Unknown message ID! ID byte='"+typeByte+"'",
 					buffer.position()-1);
 		}
 
 		switch (type) {
 			case CHOKE:
-				return ChokeMessage.parse(buffer.slice(), torrent);
+				return ChokeMessage.parse(buffer.slice(), torrent, peer);
 			case UNCHOKE:
-				return UnchokeMessage.parse(buffer.slice(), torrent);
+				return UnchokeMessage.parse(buffer.slice(), torrent, peer);
 			case INTERESTED:
-				return InterestedMessage.parse(buffer.slice(), torrent);
+				return InterestedMessage.parse(buffer.slice(), torrent, peer);
 			case NOT_INTERESTED:
-				return NotInterestedMessage.parse(buffer.slice(), torrent);
+				return NotInterestedMessage.parse(buffer.slice(), torrent, peer);
 			case HAVE:
-				return HaveMessage.parse(buffer.slice(), torrent);
+				return HaveMessage.parse(buffer.slice(), torrent, peer);
 			case BITFIELD:
-				return BitfieldMessage.parse(buffer.slice(), torrent);
+				return BitfieldMessage.parse(buffer.slice(), torrent, peer);
 			case REQUEST:
-				return RequestMessage.parse(buffer.slice(), torrent);
+				return RequestMessage.parse(buffer.slice(), torrent, peer);
 			case PIECE:
-				return PieceMessage.parse(buffer.slice(), torrent);
+				return PieceMessage.parse(buffer.slice(), torrent, peer);
 			case CANCEL:
-				return CancelMessage.parse(buffer.slice(), torrent);
+				return CancelMessage.parse(buffer.slice(), torrent, peer);
+			case PORT:
+				return PortMessage.parse(buffer.slice(), torrent, peer);
 			case EXTENSION:
-				return ExtensionMessage.parse(buffer.slice(), torrent);
+				return ExtensionMessage.parse(buffer.slice(), torrent, peer);
 			default:
 				throw new IllegalStateException("Message type should have " +
 						"been properly defined by now.");
@@ -221,7 +225,7 @@ public abstract class PeerMessage {
 		}
 
 		public static KeepAliveMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			return (KeepAliveMessage)new KeepAliveMessage(buffer)
 				.validate(torrent);
 		}
@@ -248,7 +252,7 @@ public abstract class PeerMessage {
 		}
 
 		public static ChokeMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			return (ChokeMessage)new ChokeMessage(buffer)
 				.validate(torrent);
 		}
@@ -276,7 +280,7 @@ public abstract class PeerMessage {
 		}
 
 		public static UnchokeMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			return (UnchokeMessage)new UnchokeMessage(buffer)
 				.validate(torrent);
 		}
@@ -304,7 +308,7 @@ public abstract class PeerMessage {
 		}
 
 		public static InterestedMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			return (InterestedMessage)new InterestedMessage(buffer)
 				.validate(torrent);
 		}
@@ -332,7 +336,7 @@ public abstract class PeerMessage {
 		}
 
 		public static NotInterestedMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			return (NotInterestedMessage)new NotInterestedMessage(buffer)
 				.validate(torrent);
 		}
@@ -377,7 +381,7 @@ public abstract class PeerMessage {
 		}
 
 		public static HaveMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			return new HaveMessage(buffer, buffer.getInt())
 				.validate(torrent);
 		}
@@ -427,7 +431,7 @@ public abstract class PeerMessage {
 		}
 
 		public static BitfieldMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			BitSet bitfield = new BitSet(buffer.remaining()*8);
 			for (int i=0; i < buffer.remaining()*8; i++) {
 				if ((buffer.get(i/8) & (1 << (7 -(i % 8)))) > 0) {
@@ -512,7 +516,7 @@ public abstract class PeerMessage {
 		}
 
 		public static RequestMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			int piece = buffer.getInt();
 			int offset = buffer.getInt();
 			int length = buffer.getInt();
@@ -583,7 +587,7 @@ public abstract class PeerMessage {
 		}
 
 		public static PieceMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			int piece = buffer.getInt();
 			int offset = buffer.getInt();
 			ByteBuffer block = buffer.slice();
@@ -655,7 +659,7 @@ public abstract class PeerMessage {
 		}
 
 		public static CancelMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			int piece = buffer.getInt();
 			int offset = buffer.getInt();
 			int length = buffer.getInt();
@@ -681,6 +685,64 @@ public abstract class PeerMessage {
 	}
 
 	/**
+	 * Port message.
+	 *
+	 * <len=0003><id=9><listen-port>
+	 */
+	public static class PortMessage extends PeerMessage {
+
+		private static final int BASE_SIZE = 3;
+
+		private Integer dhtPort;
+		private SharingPeer peer;
+
+		private PortMessage(ByteBuffer buffer, Integer dhtPort, SharingPeer peer) {
+			super(Type.PORT, buffer);
+			this.dhtPort = dhtPort;
+		}
+
+		public int getPort() {
+			return this.dhtPort;
+		}
+
+		@Override
+		public PortMessage validate(SharedTorrent torrent)
+			throws MessageValidationException {
+			if (this.dhtPort == null) {
+				throw new MessageValidationException(this);
+			}
+			return this;
+		}
+		
+		public static PortMessage parse(ByteBuffer buffer,
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
+			Integer dhtPort = null;
+			if (buffer.remaining() >= 2) {
+				byte b1 = buffer.get();
+				byte b2 = buffer.get();
+				
+				dhtPort = (b2 & 0xFF) << 8 | (b1 & 0xFF);
+				/*
+				dhtPort = buffer.getShort();
+				if (!ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
+					ByteBuffer b = ByteBuffer.allocate(2);
+					b.putShort(dhtPort);
+					b.flip();
+					dhtPort = b.getShort();
+				}
+				*/
+			}
+			System.err.println("HOST="+peer.getIp()+", DHTPORT="+dhtPort);
+			return new PortMessage(buffer, dhtPort, peer).validate(torrent);
+		}
+
+		public String toString() {
+			return super.toString() + "H=" + this.peer.getIp() + ", P=" + this.dhtPort;
+		}
+	}
+
+	
+	/**
 	 * Extension message.
 	 * <len=0000><id=20><ext_id=uint8_t>
 	 *
@@ -694,24 +756,41 @@ public abstract class PeerMessage {
 		}
 		
 		public static ExtensionMessage parse(ByteBuffer buffer,
-				SharedTorrent torrent) throws MessageValidationException {
+				SharedTorrent torrent, SharingPeer peer) throws MessageValidationException {
 			System.err.println("EXTENSION");
 			int msgId = buffer.get();
 			System.err.println("MSG ID="+msgId);
+			
+			try {
+				Charset charset = Charset.forName("ISO-8859-1");
+				
+				CharBuffer cbuf;
+				CharsetDecoder decoder = charset.newDecoder();
+
+				ByteBuffer x = buffer.slice();
+				byte[] y = new byte[x.limit()];
+				x.get(y);
+				ByteBuffer z = ByteBuffer.wrap(y);
+				
+				cbuf = decoder.decode(z);
+
+//				CharBuffer cb = CharBuffer.wrap(x.asCharBuffer().array());
+				if ( cbuf.toString().indexOf("added") > 0)
+					System.err.println(cbuf.toString());
+			} catch (CharacterCodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+
+			
+			
+/*
 			if (msgId == 0) {
 				try {
-		            Charset charset = Charset.forName("ISO-8859-1");
-
-					ByteBuffer x = buffer.slice();
-					byte[] y = new byte[x.limit()];
-					x.get(y);
-					ByteBuffer z = ByteBuffer.wrap(y);
-
-//					CharBuffer cb = CharBuffer.wrap(x.asCharBuffer().array());
-					CharsetDecoder decoder = charset.newDecoder();
-		            CharBuffer cbuf = decoder.decode(z);
-		            System.err.println(cbuf);
 					
+//		            BDict bdict = (BDict)(new BDecoder(cbuf.toString())).parse();
+//		            System.err.println(bdict.prettyPrint());
+		            
 					BEValue decoded = BDecoder.bdecode(z);
 					Map<String,BEValue> dat = decoded.getMap();
 					for (String k : dat.keySet()) {
@@ -730,12 +809,14 @@ public abstract class PeerMessage {
 //							}
 							
 						}
-					}					
+					}
+			
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			}
+*/
 			ByteBuffer msg = buffer.slice();
 //			System.err.println("MSG="+msg.asCharBuffer());
 			return (ExtensionMessage)new ExtensionMessage(msg)
@@ -750,5 +831,4 @@ public abstract class PeerMessage {
 			return new ExtensionMessage(buffer);
 		}
 	}
-
 }
